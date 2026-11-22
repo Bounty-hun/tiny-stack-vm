@@ -1,7 +1,3 @@
-# Tiny Stack VM
-
 [![Tiny Stack VM](https://make.fun/badge/tiny-stack-vm-01-run-20261122.svg)](https://make.fun/bounty/tiny-stack-vm-01-run-20261122)
 [![Rank](https://make.fun/badge/tiny-stack-vm-01-run-20261122/Bounty-hun/tiny-stack-vm/rank.svg)](https://make.fun/bounty/tiny-stack-vm-01-run-20261122)
 [![Reward](https://make.fun/badge/tiny-stack-vm-01-run-20261122/Bounty-hun/tiny-stack-vm/reward.svg)](https://make.fun/bounty/tiny-stack-vm-01-run-20261122)
-
-Tiny stack VM for the make.fun bounty - runs 40 ISA programs per set, exact output bytes and exit code.
