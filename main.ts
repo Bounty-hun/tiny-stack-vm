@@ -1,30 +1,18 @@
-// Tiny stack VM for make.fun tiny-stack-vm-01: a faithful port of the kit's
-// reference VM (program/generator/subject/vm.mjs), which is the rule where
-// ISA.md could be read two ways. One rule for every program: no special
-// casing by instance, program content or input. Runs 40 instances in one
-// process; deterministic (no clock, network or environment as input).
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+// Tiny stack VM: faithful port of the kit reference vm.mjs (ISA.md wins where
+// ambiguous). One rule for every program; deterministic (no clock/network/env).
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 // Opcode byte -> [immediate bytes, pops, pushes].
 const T: Record<number, number[]> = {};
-for (const [o, a, b, c] of [
-  [0, 0, 0, 0], [1, 1, 0, 1], [2, 4, 0, 1], [3, 0, 1, 0], [4, 0, 1, 2],
-  [5, 0, 2, 2], [6, 0, 2, 3], [7, 0, 3, 3], [16, 0, 2, 1], [17, 0, 2, 1],
-  [18, 0, 2, 1], [19, 0, 2, 1], [20, 0, 2, 1], [21, 0, 2, 1], [22, 0, 2, 1],
-  [23, 0, 1, 1], [24, 0, 2, 1], [25, 0, 2, 1], [26, 0, 2, 1], [27, 0, 1, 1],
-  [28, 0, 2, 1], [29, 0, 2, 1], [30, 0, 2, 1], [32, 0, 2, 1], [33, 0, 2, 1],
-  [34, 0, 2, 1], [48, 2, 0, 0], [49, 2, 1, 0], [50, 2, 1, 0], [51, 2, 0, 0],
-  [52, 0, 0, 0], [64, 0, 1, 1], [65, 0, 2, 0], [80, 0, 1, 0], [81, 0, 1, 0],
-  [82, 0, 0, 1], [83, 0, 1, 0],
-]) T[o] = [a, b, c];
+for (const r of [[0,0,0,0],[1,1,0,1],[2,4,0,1],[3,0,1,0],[4,0,1,2],[5,0,2,2],[6,0,2,3],[7,0,3,3],[16,0,2,1],[17,0,2,1],[18,0,2,1],[19,0,2,1],[20,0,2,1],[21,0,2,1],[22,0,2,1],[23,0,1,1],[24,0,2,1],[25,0,2,1],[26,0,2,1],[27,0,1,1],[28,0,2,1],[29,0,2,1],[30,0,2,1],[32,0,2,1],[33,0,2,1],[34,0,2,1],[48,2,0,0],[49,2,1,0],[50,2,1,0],[51,2,0,0],[52,0,0,0],[64,0,1,1],[65,0,2,0],[80,0,1,0],[81,0,1,0],[82,0,0,1],[83,0,1,0]]) T[r[0]] = [r[1], r[2], r[3]];
 
 function run(p: Uint8Array, inp: Uint8Array): { out: Uint8Array; code: number } {
   const n = p.length;
   const D = new Int32Array(256);
   let sp = 0;
   const C = new Int32Array(64);
-  let csp = 0;
+  let cp = 0;
   const M = new Int32Array(256);
   const out = new Uint8Array(65536);
   let olen = 0;
@@ -106,13 +94,13 @@ function run(p: Uint8Array, inp: Uint8Array): { out: Uint8Array; code: number } 
         break;
       }
       case 0x33:
-        if (csp === 64) return done(7);
-        C[csp++] = nx;
+        if (cp === 64) return done(7);
+        C[cp++] = nx;
         pc = p[nx - 2] | (p[nx - 1] << 8);
         break;
       case 0x34:
-        if (csp === 0) return done(8);
-        pc = C[--csp];
+        if (cp === 0) return done(8);
+        pc = C[--cp];
         break;
       case 0x40: {
         const a = D[sp - 1];
@@ -129,10 +117,19 @@ function run(p: Uint8Array, inp: Uint8Array): { out: Uint8Array; code: number } 
         break;
       }
       case 0x50: {
-        const s = String(D[sp - 1]);
-        if (olen + s.length > 65536) return done(11);
+        const v = D[sp - 1];
+        const mag = v < 0 ? (v === -2147483648 ? 2147483648 : -v) : v;
+        let dg = mag === 0 ? 1 : 0;
+        for (let t = mag; t > 0; t = Math.floor(t / 10)) dg++;
+        const len = dg + (v < 0 ? 1 : 0);
+        if (olen + len > 65536) return done(11);
         sp--;
-        for (let i = 0; i < s.length; i++) out[olen++] = s.charCodeAt(i);
+        let i = olen + len;
+        let m = mag;
+        if (m === 0) out[--i] = 48;
+        while (m > 0) { out[--i] = 48 + (m % 10); m = Math.floor(m / 10); }
+        if (v < 0) out[--i] = 45;
+        olen += len;
         break;
       }
       case 0x51:
@@ -145,11 +142,11 @@ function run(p: Uint8Array, inp: Uint8Array): { out: Uint8Array; code: number } 
   }
 }
 
-const I = process.env.MAKEFUN_INPUT_DIR ?? '/input';
-const O = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const I = process.env.MAKEFUN_INPUT_DIR ?? "/input";
+const O = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 for (const id of readdirSync(I).sort()) {
-  const r = run(new Uint8Array(readFileSync(join(I, id, 'program.bin'))), new Uint8Array(readFileSync(join(I, id, 'input.bin'))));
+  const r = run(new Uint8Array(readFileSync(join(I, id, "program.bin"))), new Uint8Array(readFileSync(join(I, id, "input.bin"))));
   mkdirSync(join(O, id), { recursive: true });
-  writeFileSync(join(O, id, 'stdout.bin'), r.out);
-  writeFileSync(join(O, id, 'exit.txt'), r.code + '\n');
+  writeFileSync(join(O, id, "stdout.bin"), r.out);
+  writeFileSync(join(O, id, "exit.txt"), r.code + "\n");
 }
